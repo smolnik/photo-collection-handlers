@@ -72,7 +72,7 @@ public class PhotoZipperHandler extends PhotoHandler {
 			s3.putObject(ZIP_BUCKET, zipKey, tempFile);
 			return new PhotoZipperResponse(count.get(),
 					s3.generatePresignedUrl(ZIP_BUCKET, zipKey, new Date(Instant.now().toEpochMilli() + (24L * 3600 * 1000))).toString());
-		} catch (Exception e) {
+		} catch (IOException e) {
 			throw new PhotoZipperHandlerException(e);
 		}
 	}
