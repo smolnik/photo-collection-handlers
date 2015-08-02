@@ -6,14 +6,17 @@ package net.adamsmolnik.handler.model;
  */
 public class PhotoZipperRequest extends PhotoRequest {
 
-	public final String fromDate;
+	public String fromDate;
 
-	public final String toDate;
+	public String toDate;
 
 	public PhotoZipperRequest(String principalId, String fromDate, String toDate) {
 		super(principalId);
 		this.fromDate = fromDate;
 		this.toDate = toDate;
+	}
+
+	public PhotoZipperRequest() {
 	}
 
 }

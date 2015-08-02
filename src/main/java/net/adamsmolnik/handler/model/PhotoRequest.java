@@ -6,7 +6,10 @@ package net.adamsmolnik.handler.model;
  */
 public class PhotoRequest {
 
-	public final String principalId;
+	public String principalId;
+
+	public PhotoRequest() {
+	}
 
 	public PhotoRequest(String principalId) {
 		this.principalId = principalId;
