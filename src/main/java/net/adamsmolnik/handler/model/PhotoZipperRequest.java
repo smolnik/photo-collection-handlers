@@ -11,7 +11,7 @@ public class PhotoZipperRequest extends PhotoRequest {
 	public String toDate;
 
 	public PhotoZipperRequest() {
-		
+
 	}
 
 	public PhotoZipperRequest(String principalId, String fromDate, String toDate) {

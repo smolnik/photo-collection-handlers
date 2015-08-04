@@ -12,15 +12,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Index;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
 import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
 import com.amazonaws.services.dynamodbv2.document.RangeKeyCondition;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.Region;
 
 import net.adamsmolnik.handler.exception.PhotoZipperHandlerException;
@@ -35,20 +32,18 @@ public class PhotoZipperHandler extends PhotoHandler {
 
 	private static final String ZIP_BUCKET = "zip.smolnik.photos";
 
-	private final AmazonDynamoDB clientDb = new AmazonDynamoDBClient();
-
-	private final AmazonS3 s3 = new AmazonS3Client();
-
 	public PhotoZipperResponse handle(PhotoZipperRequest request) {
 		String fromDate = request.fromDate;
 		String toDate = request.toDate;
-		DynamoDB db = new DynamoDB(clientDb);
+		DynamoDB db = new DynamoDB(thDb.get());
 		Index index = db.getTable("photos").getIndex("photoTakenDate-index");
 		ItemCollection<QueryOutcome> items = index.query(newUserIdentityKeyAttribute(request.principalId),
 				new RangeKeyCondition("photoTakenDate").between(fromDate, toDate));
 		if (!((Iterator<?>) items.iterator()).hasNext()) {
 			return new PhotoZipperResponse(0, "");
 		}
+
+		AmazonS3 s3 = thS3.get();
 		try {
 			AtomicInteger count = new AtomicInteger();
 			Path tempPath = Files.createTempFile(null, null);
@@ -74,6 +69,8 @@ public class PhotoZipperHandler extends PhotoHandler {
 					s3.generatePresignedUrl(ZIP_BUCKET, zipKey, new Date(Instant.now().toEpochMilli() + (24L * 3600 * 1000))).toString());
 		} catch (IOException e) {
 			throw new PhotoZipperHandlerException(e);
+		} finally {
+			s3.setRegion(Region.US_Standard.toAWSRegion());
 		}
 	}
 
@@ -86,11 +83,6 @@ public class PhotoZipperHandler extends PhotoHandler {
 			zos.write(buf, 0, bytesRead);
 		}
 		zos.closeEntry();
-	}
-
-	public static void main(String[] args) {
-		PhotoZipperHandler pzh = new PhotoZipperHandler();
-		System.out.println(pzh.handle(new PhotoZipperRequest(null, "2015-06-12", "2015-06-12")));
 	}
 
 }
