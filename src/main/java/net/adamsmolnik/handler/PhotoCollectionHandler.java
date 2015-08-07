@@ -9,9 +9,9 @@ import com.amazonaws.services.dynamodbv2.document.ItemCollection;
 import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
 import com.amazonaws.services.dynamodbv2.document.RangeKeyCondition;
 
-import net.adamsmolnik.handler.model.PhotoCollectionRequest;
-import net.adamsmolnik.handler.model.PhotoCollectionResponse;
-import net.adamsmolnik.handler.model.PhotoItem;
+import net.adamsmolnik.handler.api.model.PhotoCollectionRequest;
+import net.adamsmolnik.handler.api.model.PhotoCollectionResponse;
+import net.adamsmolnik.handler.api.model.PhotoItem;
 
 /**
  * @author asmolnik

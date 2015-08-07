@@ -1,4 +1,4 @@
-package net.adamsmolnik.handler.model;
+package net.adamsmolnik.handler.api.model;
 
 import java.util.ArrayList;
 import java.util.List;

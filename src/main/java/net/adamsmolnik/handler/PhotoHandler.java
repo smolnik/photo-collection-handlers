@@ -12,7 +12,7 @@ import com.amazonaws.services.s3.AmazonS3Client;
  */
 public abstract class PhotoHandler {
 
-	protected final ThreadLocal<AmazonS3> thS3 = new ThreadLocal<AmazonS3>() {
+	protected static final ThreadLocal<AmazonS3> thS3 = new ThreadLocal<AmazonS3>() {
 
 		@Override
 		protected AmazonS3 initialValue() {
@@ -21,7 +21,7 @@ public abstract class PhotoHandler {
 
 	};
 
-	protected final ThreadLocal<AmazonDynamoDB> thDb = new ThreadLocal<AmazonDynamoDB>() {
+	protected static final ThreadLocal<AmazonDynamoDB> thDb = new ThreadLocal<AmazonDynamoDB>() {
 
 		@Override
 		protected AmazonDynamoDB initialValue() {
