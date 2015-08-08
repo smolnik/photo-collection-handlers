@@ -68,7 +68,7 @@ public class DeferredBoundedLatchQueue<E> implements AutoCloseable {
 
 	public void waitFor(int latchCount) throws InterruptedException {
 		if (latchCount < 0) {
-			throw new IllegalArgumentException("Latch count argument cannot be less than 0");
+			throw new IllegalArgumentException("Latch count value cannot be less than 0");
 		}
 		synchronized (latchGuard) {
 			count = count + latchCount;

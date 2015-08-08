@@ -22,6 +22,7 @@ import com.amazonaws.services.dynamodbv2.document.Index;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
 import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
 import com.amazonaws.services.dynamodbv2.document.RangeKeyCondition;
+import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.S3Object;
 
@@ -30,6 +31,13 @@ import net.adamsmolnik.handler.api.model.PhotoZipperResponse;
 import net.adamsmolnik.handler.exception.PhotoZipperHandlerException;
 
 /**
+ * Questionable usage of AWS Lambda service - seems to work, but keep in mind
+ * the execution time limit of AWS API Gateway (up to 10 secs) and AWS Lambda
+ * itself (up to 60 secs). Therefore, the response is sent back as soon as there
+ * is enough data available to build meaningful content, prior to the handler
+ * method actually complete.
+ * 
+ * 
  * @author asmolnik
  *
  */
@@ -37,7 +45,10 @@ public class PhotoZipperHandler extends PhotoHandler {
 
 	private static final String ZIP_BUCKET = "zip.smolnik.photos";
 
-	public PhotoZipperResponse handle(PhotoZipperRequest request) {
+	public PhotoZipperResponse handle(PhotoZipperRequest request, Context context) {
+		Logger log = new Logger(context);
+		Date then = new Date();
+		log.log("Request for zipping from " + request.fromDate + " to " + request.toDate + " received ");
 		String fromDate = request.fromDate;
 		String toDate = request.toDate;
 		String principalId = request.principalId;
@@ -47,7 +58,7 @@ public class PhotoZipperHandler extends PhotoHandler {
 		}
 
 		ExecutorService es = Executors.newFixedThreadPool(50);
-		AmazonS3 s3 = thS3.get();
+		AmazonS3 s3 = thlS3.get();
 		try (ZipComposer zc = new ZipComposer()) {
 			AtomicInteger count = new AtomicInteger(0);
 			Path tempPath = Files.createTempFile(null, null);
@@ -73,9 +84,11 @@ public class PhotoZipperHandler extends PhotoHandler {
 			cpQueue.waitFor(count.get());
 			zcFuture.get();
 			String zipKey = mapIdentity(principalId) + "_" + fromDate.replaceAll("/", "") + "_" + toDate.replaceAll("/", "") + ".zip";
+			log.log("Zipping finished after " + (new Date().getTime() - then.getTime()));
 			es.submit(() -> {
 				s3.putObject(ZIP_BUCKET, zipKey, tempFile);
 				es.shutdown();
+				log.log(getClass().getSimpleName() + " is about to complete after " + (new Date().getTime() - then.getTime()));
 			});
 			return new PhotoZipperResponse(count.get(), tempFile.length(), ZIP_BUCKET, zipKey,
 					s3.generatePresignedUrl(ZIP_BUCKET, zipKey, new Date(Instant.now().toEpochMilli() + (24L * 3600 * 1000))).toString());
@@ -98,18 +111,10 @@ public class PhotoZipperHandler extends PhotoHandler {
 	}
 
 	private ItemCollection<QueryOutcome> fetchItemsFromDb(String principalId, String fromDate, String toDate) {
-		DynamoDB db = new DynamoDB(thDb.get());
+		DynamoDB db = new DynamoDB(thlDb.get());
 		Index index = db.getTable("photos").getIndex("photoTakenDate-index");
 		ItemCollection<QueryOutcome> items = index.query(newUserIdentityKeyAttribute(principalId),
 				new RangeKeyCondition("photoTakenDate").between(fromDate, toDate));
 		return items;
 	}
-
-	public static void main(String[] args) {
-		Date then = new Date();
-		PhotoZipperHandler pzh = new PhotoZipperHandler();
-		System.out.println(pzh.handle(new PhotoZipperRequest(null, "2015-06-12", "2015-08-12")));
-		System.out.println(new Date().getTime() - then.getTime());
-	}
-
 }

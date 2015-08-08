@@ -1,5 +1,7 @@
 package net.adamsmolnik.handler;
 
+import java.util.Comparator;
+import java.util.Date;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -8,6 +10,7 @@ import com.amazonaws.services.dynamodbv2.document.Index;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
 import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
 import com.amazonaws.services.dynamodbv2.document.RangeKeyCondition;
+import com.amazonaws.services.lambda.runtime.Context;
 
 import net.adamsmolnik.handler.api.model.PhotoCollectionRequest;
 import net.adamsmolnik.handler.api.model.PhotoCollectionResponse;
@@ -19,19 +22,23 @@ import net.adamsmolnik.handler.api.model.PhotoItem;
  */
 public class PhotoCollectionHandler extends PhotoHandler {
 
-	public PhotoCollectionResponse getPhotoCollection(PhotoCollectionRequest request) {
+	public PhotoCollectionResponse getPhotoCollection(PhotoCollectionRequest request, Context context) {
+		Date then = new Date();
+		Logger log = new Logger(context);
+		log.log("Request for " + request.photoTakenDate + " received");
 		String ptDate = request.photoTakenDate;
-		DynamoDB db = new DynamoDB(thDb.get());
+		DynamoDB db = new DynamoDB(thlDb.get());
 		Index index = db.getTable("photos").getIndex("photoTakenDate-index");
 		ItemCollection<QueryOutcome> items = index.query(newUserIdentityKeyAttribute(request.principalId),
 				new RangeKeyCondition("photoTakenDate").eq(ptDate));
-
-		return new PhotoCollectionResponse(ptDate,
+		PhotoCollectionResponse response = new PhotoCollectionResponse(ptDate,
 				StreamSupport.stream(items.spliterator(), false)
 						.map(item -> new PhotoItem(item.getString("bucket"), item.getString("photoKey"), item.getString("thumbnailKey"),
 								item.getString("photoTakenDate") + " " + item.getString("photoTakenTime"),
 								item.getString("madeBy") + " " + item.getString("model")))
-						.collect(Collectors.toList()));
+						.sorted(Comparator.comparing(PhotoItem::getPhotoKey)).collect(Collectors.toList()));
+		log.log(getClass().getSimpleName() + " is about to complete after " + (new Date().getTime() - then.getTime()));
+		return response;
 	}
 
 }

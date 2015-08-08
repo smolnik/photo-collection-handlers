@@ -36,6 +36,10 @@ public class PhotoItem {
 		return result;
 	}
 
+	public String getPhotoKey() {
+		return photoKey;
+	}
+
 	@Override
 	public boolean equals(Object obj) {
 		if (this == obj)
