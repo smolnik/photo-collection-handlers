@@ -85,6 +85,7 @@ public class PhotoZipperHandler extends PhotoHandler {
 			new Thread(() -> {
 				TransferManager tm = new TransferManager();
 				try {
+					log.log(then, "Transfer to s3 is about to start");
 					ObjectMetadata om = new ObjectMetadata();
 					om.setContentLength(zipOutput.length);
 					Upload upload = tm.upload(ZIP_BUCKET, zipKey, new ByteArrayInputStream(zipOutput), om);
