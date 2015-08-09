@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -19,18 +20,22 @@ import com.amazonaws.services.dynamodbv2.document.Index;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
 import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
 import com.amazonaws.services.dynamodbv2.document.RangeKeyCondition;
+import com.amazonaws.services.lambda.AWSLambda;
+import com.amazonaws.services.lambda.model.InvocationType;
+import com.amazonaws.services.lambda.model.InvokeRequest;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.transfer.TransferManager;
-import com.amazonaws.services.s3.transfer.Upload;
 
 import net.adamsmolnik.handler.api.model.PhotoZipperRequest;
 import net.adamsmolnik.handler.api.model.PhotoZipperResponse;
 import net.adamsmolnik.handler.exception.PhotoZipperHandlerException;
 
 /**
+ * DOES NOT WORK PROPERLY due to event param size constraint
+ * "... byte payload is too large for the Event invocation type (limit 131072 bytes)"
+ * !
+ * 
  * Experimental - questionable usage of AWS Lambda service - seems to work, but
  * keep in mind the execution time limit of AWS API Gateway (up to 10 secs) and
  * AWS Lambda itself (up to 60 secs). Therefore, the response is sent back as
@@ -41,7 +46,7 @@ import net.adamsmolnik.handler.exception.PhotoZipperHandlerException;
  * @author asmolnik
  *
  */
-public class PhotoZipperHandler extends PhotoHandler {
+public class PhotoZipperHandler2 extends PhotoHandler {
 
 	private static final String ZIP_BUCKET = "zip.smolnik.photos";
 
@@ -81,22 +86,11 @@ public class PhotoZipperHandler extends PhotoHandler {
 			cpQueue.waitFor(count.get());
 			String zipKey = mapIdentity(principalId) + "_" + fromDate.replaceAll("/", "") + "_" + toDate.replaceAll("/", "") + ".zip";
 			log.log(then, "Zipping finished");
+			AWSLambda lbd = thlLbd.get();
 			byte[] zipOutput = zcFuture.get();
-			new Thread(() -> {
-				TransferManager tm = new TransferManager();
-				try {
-					ObjectMetadata om = new ObjectMetadata();
-					om.setContentLength(zipOutput.length);
-					Upload upload = tm.upload(ZIP_BUCKET, zipKey, new ByteArrayInputStream(zipOutput), om);
-					upload.waitForCompletion();
-				} catch (Exception e) {
-					cleanup();
-					log.log(then, "Exception occured: " + e.getLocalizedMessage());
-				} finally {
-					tm.shutdownNow();
-					log.log(then, getClass().getSimpleName() + " is about to complete");
-				}
-			}).start();
+			InvokeRequest invokeRequest = new InvokeRequest().withInvocationType(InvocationType.Event)
+					.withPayload(createJsonRequest(zipKey, zipOutput)).withFunctionName("s3-data-push-handler");
+			lbd.invoke(invokeRequest);
 			return new PhotoZipperResponse(count.get(), zipOutput.length, ZIP_BUCKET, zipKey,
 					s3.generatePresignedUrl(ZIP_BUCKET, zipKey, new Date(Instant.now().toEpochMilli() + (24L * 3600 * 1000))).toString());
 		} catch (InterruptedException | ExecutionException e) {
@@ -105,6 +99,11 @@ public class PhotoZipperHandler extends PhotoHandler {
 		} finally {
 			es.shutdownNow();
 		}
+	}
+
+	private static String createJsonRequest(String zipKey, byte[] zipOutput) {
+		return "{\"bucket\":\"" + ZIP_BUCKET + "\",\"zipKey\":\"" + zipKey + "\",\"zipOutput\":\"" + Base64.getEncoder().encodeToString(zipOutput)
+				+ "\"}";
 	}
 
 	private byte[] readBytes(int size, S3Object s3Object) {

@@ -1,9 +1,8 @@
 package net.adamsmolnik.handler;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,9 +18,10 @@ class ZipComposer implements AutoCloseable {
 
 	private final ExecutorService composer = Executors.newSingleThreadExecutor();
 
-	Future<?> compose(Path zipOutputPath, DeferredBoundedLatchQueue<CachedPhoto> cpQueue) {
+	Future<byte[]> compose(DeferredBoundedLatchQueue<CachedPhoto> cpQueue) {
 		return composer.submit(() -> {
-			try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipOutputPath))) {
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			try (ZipOutputStream zos = new ZipOutputStream(baos)) {
 				while (!cpQueue.isClosed()) {
 					Optional<CachedPhoto> cpOptional = cpQueue.take();
 					if (!cpOptional.isPresent()) {
@@ -33,7 +33,7 @@ class ZipComposer implements AutoCloseable {
 					}
 				}
 			}
-			return null;
+			return baos.toByteArray();
 		});
 	}
 

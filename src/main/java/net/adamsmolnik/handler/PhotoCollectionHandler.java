@@ -31,13 +31,14 @@ public class PhotoCollectionHandler extends PhotoHandler {
 		Index index = db.getTable("photos").getIndex("photoTakenDate-index");
 		ItemCollection<QueryOutcome> items = index.query(newUserIdentityKeyAttribute(request.principalId),
 				new RangeKeyCondition("photoTakenDate").eq(ptDate));
+		log.log(then, "QueryOutcome received for " + request.photoTakenDate);
 		PhotoCollectionResponse response = new PhotoCollectionResponse(ptDate,
 				StreamSupport.stream(items.spliterator(), false)
 						.map(item -> new PhotoItem(item.getString("bucket"), item.getString("photoKey"), item.getString("thumbnailKey"),
 								item.getString("photoTakenDate") + " " + item.getString("photoTakenTime"),
 								item.getString("madeBy") + " " + item.getString("model")))
 						.sorted(Comparator.comparing(PhotoItem::getPhotoKey)).collect(Collectors.toList()));
-		log.log(getClass().getSimpleName() + " is about to complete after " + (new Date().getTime() - then.getTime()));
+		log.log(then, getClass().getSimpleName() + " is about to complete");
 		return response;
 	}
 
