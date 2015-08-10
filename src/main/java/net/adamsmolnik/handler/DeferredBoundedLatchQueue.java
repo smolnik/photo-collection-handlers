@@ -5,10 +5,8 @@ import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
- * @author asmolnik
  *
  */
 public class DeferredBoundedLatchQueue<E> implements AutoCloseable {
