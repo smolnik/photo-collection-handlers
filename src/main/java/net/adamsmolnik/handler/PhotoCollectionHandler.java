@@ -22,7 +22,7 @@ import net.adamsmolnik.handler.api.model.PhotoItem;
  */
 public class PhotoCollectionHandler extends PhotoHandler {
 
-	public PhotoCollectionResponse getPhotoCollection(PhotoCollectionRequest request, Context context) {
+	public PhotoCollectionResponse handle(PhotoCollectionRequest request, Context context) {
 		Date then = new Date();
 		Logger log = new Logger(context);
 		log.log("Request for " + request.photoTakenDate + " received");
