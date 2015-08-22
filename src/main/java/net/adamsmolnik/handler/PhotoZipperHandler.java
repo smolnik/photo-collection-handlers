@@ -50,7 +50,7 @@ public class PhotoZipperHandler extends PhotoHandler {
 
 	public PhotoZipperResponse handle(PhotoZipperRequest request, Context context) {
 		Logger log = new Logger(context);
-		Date then = new Date();
+		long then = System.currentTimeMillis();
 		log.log("Request for zipping from " + request.fromDate + " to " + request.toDate + " received ");
 		String fromDate = request.fromDate;
 		String toDate = request.toDate;

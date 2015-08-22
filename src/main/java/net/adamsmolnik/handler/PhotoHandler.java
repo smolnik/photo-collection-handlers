@@ -33,8 +33,8 @@ public abstract class PhotoHandler {
 			doLog("[" + getBaseMessage(message) + "]");
 		}
 
-		protected void log(Date then, String message) {
-			doLog("[duration since then: " + (new Date().getTime() - then.getTime()) + ", " + getBaseMessage(message) + "]");
+		protected void log(long then, String message) {
+			doLog("[duration since then: " + (System.currentTimeMillis() - then) + ", " + getBaseMessage(message) + "]");
 		}
 
 		private String getBaseMessage(String message) {

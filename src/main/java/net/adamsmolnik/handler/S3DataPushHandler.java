@@ -2,7 +2,6 @@ package net.adamsmolnik.handler;
 
 import java.io.ByteArrayInputStream;
 import java.util.Base64;
-import java.util.Date;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.s3.model.ObjectMetadata;
@@ -19,7 +18,7 @@ import net.adamsmolnik.handler.api.model.S3DataPushResponse;
 public class S3DataPushHandler extends PhotoHandler {
 
 	public S3DataPushResponse handle(S3DataPushRequest request, Context context) {
-		Date then = new Date();
+		long then = System.currentTimeMillis();
 		Logger log = new Logger(context);
 		log.log("Received: " + request);
 		byte[] zipOutput = Base64.getDecoder().decode(request.zipOutput);
