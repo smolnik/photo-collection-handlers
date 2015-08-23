@@ -6,6 +6,14 @@ package net.adamsmolnik.handler.api.model;
  */
 public class PhotoCollectionRequest extends PhotoRequest {
 
-	public String photoTakenDate;
+	private String photoTakenDate;
+
+	public String getPhotoTakenDate() {
+		return photoTakenDate;
+	}
+
+	public void setPhotoTakenDate(String photoTakenDate) {
+		this.photoTakenDate = photoTakenDate;
+	}
 
 }

@@ -3,108 +3,78 @@ package net.adamsmolnik.handler;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Index;
-import com.amazonaws.services.dynamodbv2.document.ItemCollection;
-import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
-import com.amazonaws.services.dynamodbv2.document.RangeKeyCondition;
+import com.amazonaws.ClientConfiguration;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.Upload;
 
-import net.adamsmolnik.handler.api.model.PhotoZipperRequest;
-import net.adamsmolnik.handler.api.model.PhotoZipperResponse;
 import net.adamsmolnik.handler.exception.PhotoZipperHandlerException;
 
 /**
- * Experimental and questionable usage of AWS Lambda service - seems to work in
- * general, as long as Lambda instances with the function handled there are up
- * and running (not in a dormant or passive state), but still keep in mind the
- * execution time limit of AWS API Gateway (up to 10 secs) and AWS Lambda itself
- * (up to 60 secs). Therefore, the response is sent back as soon as there is
- * enough data available to build meaningful content (i.e. presigned url of zip
- * output file along its size and number of entries), prior to the handler
- * method actually complete the transfer of the outcome zip file to S3.
- * 
- * 
  * @author asmolnik
  *
  */
 public class PhotoZipperHandler extends PhotoHandler {
 
-	private static final String ZIP_BUCKET = "zip.smolnik.photos";
+	protected static final int MAX_CONNECTIONS = 60;
 
-	public PhotoZipperResponse handle(PhotoZipperRequest request, Context context) {
-		Logger log = new Logger(context);
+	public void handle(PhotoZipperInput pzi, Context context) {
 		long then = System.currentTimeMillis();
-		log.log("Request for zipping from " + request.fromDate + " to " + request.toDate + " received ");
-		String fromDate = request.fromDate;
-		String toDate = request.toDate;
-		String principalId = request.principalId;
-		ItemCollection<QueryOutcome> items = fetchItemsFromDb(principalId, fromDate, toDate);
-		if (!((Iterator<?>) items.iterator()).hasNext()) {
-			return new PhotoZipperResponse(0, 0, "", "", "");
-		}
-
-		AmazonS3 s3 = thlS3.get();
+		Logger log = new Logger(context);
+		log.log("Request for zip of " + pzi);
+		ClientConfiguration cc = new ClientConfiguration();
+		cc.setMaxConnections(MAX_CONNECTIONS);
+		AmazonS3 s3 = new AmazonS3Client(cc);
 		ExecutorService es = Executors.newFixedThreadPool((int) (0.8 * MAX_CONNECTIONS) + 2);
-		try (ZipComposer zc = new ZipComposer()) {
-			AtomicInteger count = new AtomicInteger();
-			DeferredBoundedLatchQueue<CachedPhoto> cachedPhotosToBeZippedQueue = new DeferredBoundedLatchQueue<>();
+		List<PhotoKeyEntity> pkEntities = pzi.getPhotoKeyEntities();
+		int size = pkEntities.size();
+		try (ZipComposer zc = new ZipComposer(size)) {
+			BlockingQueue<CachedPhoto> cachedPhotosToBeZippedQueue = new LinkedBlockingQueue<>(size);
 			Future<byte[]> zcFuture = zc.compose(cachedPhotosToBeZippedQueue);
-			List<Future<?>> itemFutures = new ArrayList<>();
-			items.forEach(item -> {
-				count.incrementAndGet();
+			List<Future<Void>> itemFutures = new ArrayList<>();
+			pkEntities.forEach(pkEntity -> {
 				itemFutures.add(es.submit(() -> {
-					String imageKey = item.getString("photoKey");
-					String[] imKeyParts = imageKey.split("/");
-					String fileName = imKeyParts[imKeyParts.length - 1];
-					S3Object s3Object = s3.getObject(item.getString("bucket"), imageKey);
-					int size = (int) s3Object.getObjectMetadata().getContentLength();
-					cachedPhotosToBeZippedQueue.put(new CachedPhoto(fileName, new ByteArrayInputStream(readBytes(size, s3Object))));
+					String pk = pkEntity.getKey();
+					String[] photoKeyParts = pk.split("/");
+					String fileName = photoKeyParts[photoKeyParts.length - 1];
+					S3Object s3Object = s3.getObject(pkEntity.getBucket(), pk);
+					int length = (int) s3Object.getObjectMetadata().getContentLength();
+					cachedPhotosToBeZippedQueue.put(new CachedPhoto(fileName, new ByteArrayInputStream(readBytes(length, s3Object))));
+					return null;
 				}));
 			});
 			for (Future<?> itemFuture : itemFutures) {
 				itemFuture.get();
 			}
-			cachedPhotosToBeZippedQueue.waitFor(count.get());
-			String zipKey = mapIdentity(principalId) + "_" + fromDate.replaceAll("/", "") + "_" + toDate.replaceAll("/", "") + ".zip";
+			zc.await(5, TimeUnit.MINUTES);
 			log.log(then, "Zipping finished");
 			byte[] zipOutput = zcFuture.get();
-			new Thread(() -> {
-				TransferManager tm = new TransferManager();
-				try {
-					log.log(then, "Transfer to s3 is about to start");
-					ObjectMetadata om = new ObjectMetadata();
-					om.setContentLength(zipOutput.length);
-					Upload upload = tm.upload(ZIP_BUCKET, zipKey, new ByteArrayInputStream(zipOutput), om);
-					upload.waitForCompletion();
-				} catch (Exception e) {
-					cleanup();
-					log.log(then, "Exception occured: " + e.getLocalizedMessage());
-				} finally {
-					tm.shutdownNow();
-					log.log(then, getClass().getSimpleName() + " is about to complete");
-				}
-			}).start();
-			return new PhotoZipperResponse(count.get(), zipOutput.length, ZIP_BUCKET, zipKey,
-					s3.generatePresignedUrl(ZIP_BUCKET, zipKey, new Date(Instant.now().toEpochMilli() + (24L * 3600 * 1000))).toString());
+			TransferManager tm = new TransferManager();
+			try {
+				log.log(then, "Transfer to s3 is about to start");
+				ObjectMetadata om = new ObjectMetadata();
+				om.setContentLength(zipOutput.length);
+				Upload upload = tm.upload(pzi.getZipBucket(), pzi.getZipKey(), new ByteArrayInputStream(zipOutput), om);
+				upload.waitForCompletion();
+			} finally {
+				tm.shutdownNow();
+				log.log(then, getClass().getSimpleName() + " is about to complete");
+			}
 		} catch (InterruptedException | ExecutionException e) {
-			cleanup();
 			throw new PhotoZipperHandlerException(e);
 		} finally {
 			es.shutdownNow();
@@ -124,11 +94,4 @@ public class PhotoZipperHandler extends PhotoHandler {
 		}
 	}
 
-	private ItemCollection<QueryOutcome> fetchItemsFromDb(String principalId, String fromDate, String toDate) {
-		DynamoDB db = new DynamoDB(thlDb.get());
-		RangeKeyCondition condition = fromDate.equals(toDate) ? new RangeKeyCondition("photoTakenDate").eq(fromDate)
-				: new RangeKeyCondition("photoTakenDate").between(fromDate, toDate);
-		Index index = db.getTable("photos").getIndex("photoTakenDate-index");
-		return index.query(newUserIdentityKeyAttribute(principalId), condition);
-	}
 }

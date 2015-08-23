@@ -6,6 +6,14 @@ package net.adamsmolnik.handler.api.model;
  */
 public class PhotoRequest {
 
-	public String principalId;
+	private String principalId;
+
+	public String getPrincipalId() {
+		return principalId;
+	}
+
+	public void setPrincipalId(String principalId) {
+		this.principalId = principalId;
+	}
 
 }
